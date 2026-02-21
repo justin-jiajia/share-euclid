@@ -110,7 +110,7 @@ export class Point {
         deleteConstruct(this);
     }
     update() {
-        if(isSelected(this) && mouseIsPressed && mouseButton === LEFT) {
+        if(isSelected(this) && ((mouseIsPressed && mouseButton === LEFT) || appState.touchIsDown)) {
             const n = cam.cameraToWorld(mouseX, mouseY);
             const p = cam.cameraToWorld(pmouseX, pmouseY);
             if(this.locked) {

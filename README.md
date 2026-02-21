@@ -17,7 +17,8 @@
 
  A floating **Construction history** panel appears in the top-right corner and records recent construction operations.
  
- Right click and drag (or left click and drag in empty space) to pan the camera. Use the mouse wheel to zoom.
+Right click and drag (or left click and drag in empty space) to pan the camera. Use the mouse wheel to zoom.
+On touch devices, drag with one finger to move, and pinch with two fingers to zoom.
 
  The blue points are freely moveable. The red points are locked along a line/circle, so their motion has one degree of freedom. The green points are intersection points and cannot be moved directly.
 
