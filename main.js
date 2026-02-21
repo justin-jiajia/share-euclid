@@ -86,12 +86,12 @@ function applyPinchGesture(previousGesture, nextA, nextB) {
 }
 
 function getActiveTouches(event) {
-    const source = event?.touches?.length ? Array.from(event.touches) : (Array.isArray(touches) ? touches : []);
-    if(!source.length) return [];
-    return source
+    const touchSource = event?.touches?.length ? Array.from(event.touches) : (Array.isArray(touches) ? touches : []);
+    if(!touchSource.length) return [];
+    return touchSource
         .map((touch) => {
-            const x = Number.isFinite(touch?.x) ? touch.x : (Number.isFinite(touch?.clientX) ? touch.clientX : touch?.winX);
-            const y = Number.isFinite(touch?.y) ? touch.y : (Number.isFinite(touch?.clientY) ? touch.clientY : touch?.winY);
+            const x = Number.isFinite(touch?.x) ? touch.x : (Number.isFinite(touch?.clientX) ? touch.clientX : (Number.isFinite(touch?.winX) ? touch.winX : null));
+            const y = Number.isFinite(touch?.y) ? touch.y : (Number.isFinite(touch?.clientY) ? touch.clientY : (Number.isFinite(touch?.winY) ? touch.winY : null));
             return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
         })
         .filter(Boolean);
