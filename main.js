@@ -827,6 +827,12 @@ window.mouseReleased = function() {
     }
 };
 
+window.mouseClicked = function() {
+    if(isCanvasInteractionBlockedAt(mouseX, mouseY)) return false;
+    if(!appState.pressed) appState.pressed = true;
+    return false;
+};
+
 window.touchStarted = function(event) {
     const activeTouches = getActiveTouches(event);
     if(!activeTouches || !activeTouches.length) return false;
