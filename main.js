@@ -29,6 +29,7 @@ const undoStack = [];
 const redoStack = [];
 let currentStateSignature = "";
 let dragUndoPending = false;
+let touchGesture = null;
 
 function getToolbarHeight() {
     return toolbarUi.getHeight();
@@ -53,10 +54,47 @@ function updateHoveringPriority(points, intersections, lines, circles) {
         if((c instanceof Point && points) && c.hovering()) appState.hovering = c;
 }
 
-function isMouseInsideElement(el) {
+function isMouseInsideElement(el, x = mouseX, y = mouseY) {
     if(!el) return false;
     const rect = el.getBoundingClientRect();
-    return mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function isCanvasInteractionBlockedAt(x, y) {
+    return y <= getToolbarHeight() || isMouseInsideElement(historyPanel, x, y);
+}
+
+function applyPinchGesture(previousGesture, nextA, nextB) {
+    const nextMidX = (nextA.x + nextB.x) * 0.5;
+    const nextMidY = (nextA.y + nextB.y) * 0.5;
+    const previousMidX = previousGesture.midX;
+    const previousMidY = previousGesture.midY;
+    const nextDistance = Math.hypot(nextA.x - nextB.x, nextA.y - nextB.y);
+    if(previousGesture.distance > 0 && nextDistance > 0) {
+        const p = cam.rcameraToWorld(previousMidX, previousMidY);
+        cam.rzoom = constrain(cam.rzoom * (nextDistance / previousGesture.distance), 1, 5);
+        const n = cam.rcameraToWorld(nextMidX, nextMidY);
+        cam.rx += p[0] - n[0];
+        cam.ry += p[1] - n[1];
+    }
+    touchGesture = {
+        mode: "pinch",
+        midX: nextMidX,
+        midY: nextMidY,
+        distance: nextDistance,
+    };
+}
+
+function getActiveTouches(event) {
+    const touchSource = event?.touches?.length ? Array.from(event.touches) : (Array.isArray(touches) ? touches : []);
+    if(!touchSource.length) return [];
+    return touchSource
+        .map((touch) => {
+            const x = Number.isFinite(touch?.x) ? touch.x : (Number.isFinite(touch?.clientX) ? touch.clientX : (Number.isFinite(touch?.winX) ? touch.winX : null));
+            const y = Number.isFinite(touch?.y) ? touch.y : (Number.isFinite(touch?.clientY) ? touch.clientY : (Number.isFinite(touch?.winY) ? touch.winY : null));
+            return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+        })
+        .filter(Boolean);
 }
 
 function escapeHtml(text) {
@@ -767,7 +805,7 @@ window.keyReleased = function() {
 };
 
 window.mousePressed = function() {
-    if(mouseY <= getToolbarHeight() || isMouseInsideElement(historyPanel)) {
+    if(isCanvasInteractionBlockedAt(mouseX, mouseY)) {
         return;
     }
 
@@ -787,6 +825,104 @@ window.mouseReleased = function() {
         captureUndoSnapshot();
         dragUndoPending = false;
     }
+};
+
+window.mouseClicked = function() {
+    if(isCanvasInteractionBlockedAt(mouseX, mouseY)) return false;
+    if(!appState.pressed) appState.pressed = true;
+    return false;
+};
+
+window.touchStarted = function(event) {
+    const activeTouches = getActiveTouches(event);
+    if(!activeTouches || !activeTouches.length) return false;
+
+    if(activeTouches.length >= 2) {
+        appState.touchIsDown = false;
+        const [a, b] = activeTouches;
+        touchGesture = {
+            mode: "pinch",
+            midX: (a.x + b.x) * 0.5,
+            midY: (a.y + b.y) * 0.5,
+            distance: Math.hypot(a.x - b.x, a.y - b.y),
+        };
+        return false;
+    }
+
+    const touch = activeTouches[0];
+    if(isCanvasInteractionBlockedAt(touch.x, touch.y)) {
+        appState.touchIsDown = false;
+        touchGesture = null;
+        return false;
+    }
+
+    appState.touchIsDown = true;
+    touchGesture = { mode: "drag", x: touch.x, y: touch.y, prevX: touch.x, prevY: touch.y };
+    mouseX = touch.x;
+    mouseY = touch.y;
+    pmouseX = touch.x;
+    pmouseY = touch.y;
+    window.mousePressed();
+    return false;
+};
+
+window.touchMoved = function(event) {
+    const activeTouches = getActiveTouches(event);
+    if(!activeTouches || !activeTouches.length) return false;
+
+    if(activeTouches.length >= 2) {
+        appState.touchIsDown = false;
+        const [a, b] = activeTouches;
+        if(!touchGesture || touchGesture.mode !== "pinch") {
+            touchGesture = {
+                mode: "pinch",
+                midX: (a.x + b.x) * 0.5,
+                midY: (a.y + b.y) * 0.5,
+                distance: Math.hypot(a.x - b.x, a.y - b.y),
+            };
+        }
+        else {
+            applyPinchGesture(touchGesture, a, b);
+        }
+        return false;
+    }
+
+    const touch = activeTouches[0];
+    pmouseX = mouseX;
+    pmouseY = mouseY;
+    mouseX = touch.x;
+    mouseY = touch.y;
+    if(!touchGesture || touchGesture.mode !== "drag") {
+        touchGesture = { mode: "drag", x: touch.x, y: touch.y, prevX: touch.x, prevY: touch.y };
+    }
+    else if(!appState.selected.length && !appState.toolStack.length) {
+        const n = cam.cameraToWorld(touch.x, touch.y);
+        const p = cam.cameraToWorld(touchGesture.x, touchGesture.y);
+        cam.rx += p[0] - n[0];
+        cam.ry += p[1] - n[1];
+    }
+    touchGesture.prevX = touchGesture.x;
+    touchGesture.prevY = touchGesture.y;
+    touchGesture.x = touch.x;
+    touchGesture.y = touch.y;
+    return false;
+};
+
+window.touchEnded = function(event) {
+    const activeTouches = getActiveTouches(event);
+    if(activeTouches && activeTouches.length) {
+        if(activeTouches.length === 1) {
+            const touch = activeTouches[0];
+            touchGesture = { mode: "drag", x: touch.x, y: touch.y, prevX: touch.x, prevY: touch.y };
+            appState.touchIsDown = !isCanvasInteractionBlockedAt(touch.x, touch.y);
+        }
+        return false;
+    }
+
+    appState.touchIsDown = false;
+    touchGesture = null;
+    window.mouseReleased();
+    return false;
 };
 
 window.mouseWheel = function(e) {
@@ -929,6 +1065,12 @@ function controls() {
 }
 
 window.draw = function() {
+    if(appState.touchIsDown && touchGesture && touchGesture.mode === "drag") {
+        pmouseX = touchGesture.prevX;
+        pmouseY = touchGesture.prevY;
+        mouseX = touchGesture.x;
+        mouseY = touchGesture.y;
+    }
     appState.toolbarHeight = getToolbarHeight();
     toolbarUi.updateActive(getActiveRootTool());
 

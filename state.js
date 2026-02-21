@@ -9,6 +9,7 @@ export const appState = {
     pressed: false,
     released: false,
     toolbarHeight: 72,
+    touchIsDown: false,
 };
 
 export const cam = {
